@@ -1,9 +1,9 @@
-
+from http import HTTPStatus
 from Node import Node
 from flask import Flask, request
 from pymongo import MongoClient
 from Tree import Tree
-
+import logging
 
 # Initializing server and BST variables
 app = Flask(__name__)
@@ -12,77 +12,107 @@ db = client["bst_db"]
 table = db["bst_table12"]
 bst = Tree()
 
+# Create and configure logger
+logging.basicConfig(filename="log.log",
+                    format='%(asctime)s %(message)s',
+                    filemode='w')
+
+# Creating an object
+logger = logging.getLogger()
+
+
 # Function empties MongoDB and the in-program tree
 @app.route('/delete_all_treasures', methods=['DELETE'])
 def delete_all_treasures():
-    table.delete_many({})
-    bst.root = None
-    return "Success", 200
+    amount = table.count_documents({})
+    res = table.delete_many({})
+    if amount == res.deleted_count:
+        bst.root = None
+        logger.info("Deleted table content")
+        return "Success", HTTPStatus.OK
+    logger.error("Table content deletion failed")
+    return "Error - Delete query has failed", HTTPStatus.BAD_REQUEST
+
 
 @app.route('/insert_treasure', methods=['POST'])
 def insert_treasure():
     val_json = request.get_json()
+    if "value" not in val_json:
+        return "Error, input does not contain treasure", HTTPStatus.BAD_REQUEST
     val = val_json["value"]
-    if bst.insert(Node(val), table):
-        return "Success", 200
+    res = bst.insert(Node(val), table)
+    if res[0]:
+        logger.info("Treasure " + str(val) + " was inserted successfully")
+        return "Success", HTTPStatus.OK
     else:
-        return "Error", 400
+        logger.error(res[1])
+        return "Error - " + res[1], HTTPStatus.BAD_REQUEST
+
 
 @app.route('/get_treasures')
 def get_treasures():
     val = bst.bst_pass("in-order")
-    if val is None:
-        return "Error", 400
-    else:
-        return {"treasures" : val}, 200
+    logger.info("The pass was a success")
+    return {"treasures": val}, HTTPStatus.OK
+
 
 @app.route('/delete_treasure', methods=['DELETE'])
 def delete_treasure():
     val_json = request.get_json()
+    if "value" not in val_json:
+        return "Error, input does not contain treasure", HTTPStatus.BAD_REQUEST
     val = val_json["value"]
-    if bst.delete(val, table):
-        return "Success", 200
+    res = bst.delete(val, table)
+    if res[0]:
+        logger.info("Treasure " + str(val) + " was deleted successfully")
+        return "Success", HTTPStatus.OK
     else:
-        return "Error", 400
+        logger.error(res[1])
+        return "Error - " + res[1], HTTPStatus.BAD_REQUEST
+
 
 @app.route('/search_treasure', methods=['GET'])
 def search_treasure():
     val = request.args.get("value")
+    if not val:
+        return "Error, input does not contain treasure", HTTPStatus.BAD_REQUEST
     if bst.search(val):
-        return {"message" : "Treasure found!"}, 200
+        logger.info("treasure " + str(val) + " is in the bst")
+        return {"message" : "Treasure found!"}, HTTPStatus.OK
     else:
-        return {"message" : "Treasure not found"}, 400
+        logger.error("treasure " + str(val) + " is not in the bst")
+        return {"message" : "Treasure not found"}, HTTPStatus.BAD_REQUEST
+
 
 @app.route('/pre_order_traversal', methods=['GET'])
 def pre_order_traversal():
     val = bst.bst_pass("pre-order")
-    if val is None:
-        return "Error", 400
-    else:
-        return {"traversal_result": val}, 200
+    logger.info("The pass was a success")
+    return {"traversal_result": val}, HTTPStatus.OK
+
 
 @app.route('/in_order_traversal', methods=['GET'])
 def in_order_traversal():
     val = bst.bst_pass("in-order")
-    if val is None:
-        return "Error", 400
-    else:
-        return {"traversal_result": val}, 200
+    logger.info("The pass was a success")
+    return {"traversal_result": val}, HTTPStatus.OK
+
 
 @app.route('/post_order_traversal', methods=['GET'])
 def post_order_traversal():
     val = bst.bst_pass("post-order")
-    if val is None:
-        return "Error", 400
-    else:
-        return {"traversal_result": val}, 200
+    logger.info("The pass was a success")
+    return {"traversal_result": val}, HTTPStatus.OK
+
 
 @app.route('/validate_bst')
 def validate_bst():
     if bst.validate_and_visualize(table):
-        return {"message" : "BST is valid"}, 200
+        logger.info("The BST is valid")
+        return {"message" : "BST is valid"}, HTTPStatus.OK
     else:
-        return {"message" : "BST is not valid"}, 400
+        logger.error("The BST is not valid")
+        return {"message" : "BST is not valid"}, HTTPStatus.BAD_REQUEST
 
 if __name__ == "__main__":
     app.run()

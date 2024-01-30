@@ -14,12 +14,12 @@ class Node:
             return ["", self]
         # Progressing down the tree or returning if the end has been reached
         if float(treasure) < self.treasure:
-            if self.left is None:
+            if not self.left:
                 return ["left", self]
             res = self.left.actual_search(treasure)
             res.append(self)
             return res
-        if self.right is None:
+        if not self.right:
             return ["right", self]
         res = self.right.actual_search(treasure)
         res.append(self)
@@ -27,7 +27,7 @@ class Node:
     # Returning the path to the successor in the right subtree of a node
     def find_successor(self):
         # Going left until finding a node without a left child
-        if self.left is None:
+        if not self.left:
             return [self]
         res = self.left.find_successor()
         res.append(self)
@@ -36,34 +36,31 @@ class Node:
     def bst_pass(self, order, node_list):
         if order == "pre-order":
             node_list.append(self.treasure)
-            print("current treasure: " + str(self.treasure))
-        if self.left is not None:
+        if self.left:
             node_list = self.left.bst_pass(order, node_list)
         if order == "in-order":
             node_list.append(self.treasure)
-            print("current treasure: " + str(self.treasure))
-        if self.right is not None:
+        if self.right:
             node_list = self.right.bst_pass(order, node_list)
         if order == "post-order":
             node_list.append(self.treasure)
-            print("current treasure: " + str(self.treasure))
         return node_list
 
     # Passing throughout the tree, checking if the nodes are ordered correctly and returning the tree's depth
     def validate(self, depth):
-        if (self.left is not None and self.left.treasure > self.treasure)\
-                or (self.right is not None and self.right.treasure < self.treasure):
+        if (self.left and self.left.treasure > self.treasure)\
+                or (self.right and self.right.treasure < self.treasure):
             return inf
-        if self.left is None and self.right is None:
+        if not self.left and not self.right:
             return depth
-        if self.left is None:
+        if not self.left:
             return self.right.validate(depth + 1)
-        if self.right is None:
+        if not self.right:
             return self.left.validate(depth + 1)
         return max(self.right.validate(depth + 1), self.left.validate(depth + 1))
     # Passing through the tree and creating its visualization
     def visualize(self, vis, depth, index):
-        if self.left is not None:
+        if self.left:
             res = self.left.visualize(vis, depth + 1, index)
             vis = res[0]
             index = res[1]
@@ -78,7 +75,7 @@ class Node:
         # Adding the current node to the visualization based on its depth and index in an in-order pass
         vis[depth] = vis[depth][:index] + val + vis[depth][index+2:]
         index += 2
-        if self.right is not None:
+        if self.right:
             return self.right.visualize(vis, depth + 1, index)
         # Advancing the index based on the size of the node's empty subtree
         return (vis, index + int(math.pow(2,len(vis) - depth - 1) - 1) * 2)
