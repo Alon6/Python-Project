@@ -1,6 +1,8 @@
 
 import math
 from math import inf
+LEFT = "left"
+RIGHT = "right"
 class Node:
     # Initializing empty node
     def __init__(self, value):
@@ -15,12 +17,12 @@ class Node:
         # Progressing down the tree or returning if the end has been reached
         if float(treasure) < self.treasure:
             if not self.left:
-                return ["left", self]
+                return [LEFT, self]
             res = self.left.actual_search(treasure)
             res.append(self)
             return res
         if not self.right:
-            return ["right", self]
+            return [RIGHT, self]
         res = self.right.actual_search(treasure)
         res.append(self)
         return res

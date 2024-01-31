@@ -2,7 +2,10 @@
 import math
 import Node
 from math import inf
+from Node import LEFT
+from Node import RIGHT
 class Tree:
+
     # Initializing an empty tree
     def __init__(self):
         self.root = None
@@ -14,7 +17,7 @@ class Tree:
     # Search the node, extract it from the path and print a relevant message
     def search(self, treasure):
         res = self.actual_search(treasure)
-        if res[0] != "" or not res[1]:
+        if res[0] or not res[1]:
             return False
         return (True,"")
     # Search the place in which the node should be inserted and update the tree accordingly
@@ -24,9 +27,9 @@ class Tree:
         if not res[1]:
             self.root = node
         # Check for normal cases
-        elif res[0] == "left":
+        elif res[0] == LEFT:
             res[1].left = node
-        elif res[0] == "right":
+        elif res[0] == RIGHT:
             res[1].right = node
         else:
             return (False, "Insertion failed, treasure " + str(node.treasure) + " already exists")
@@ -68,16 +71,16 @@ class Tree:
             suc_res = node.right.find_successor()
             suc = suc_res[0]
             suc.left = node.left
-            flag = flag and self.update_node_db(suc, node.left, "left", table)
+            flag = flag and self.update_node_db(suc, node.left, LEFT, table)
             if not suc.right and len(suc_res) > 1:
                 suc.right = node.right
-                flag = flag and self.update_node_db(suc, node.right, "right", table)
+                flag = flag and self.update_node_db(suc, node.right, RIGHT, table)
             else:
                 if len(suc_res) > 1:
                     suc_parent = suc_res[1]
                     flag = flag and self.swap(suc, suc.right, suc_parent, table)
                     suc.right = node.right
-                    flag = flag and self.update_node_db(suc, node.right, "right", table)
+                    flag = flag and self.update_node_db(suc, node.right, RIGHT, table)
             if not parent:
                 self.root = suc
                 flag = flag and self.update_root_db(suc, table)
@@ -128,12 +131,12 @@ class Tree:
             if parent.left and parent.left.treasure == old_node.treasure:
                 parent.left = new_node
                 query = {"treasure": str(parent.treasure)}
-                update = {"$set": {"left": new_val}}
+                update = {"$set": {LEFT: new_val}}
                 table.update_one(query, update)
             else:
                 parent.right = new_node
                 query = {"treasure": str(parent.treasure)}
-                update = {"$set": {"right": new_val}}
+                update = {"$set": {RIGHT: new_val}}
                 table.update_one(query, update)
             return True
         except Exception as e:
@@ -165,23 +168,22 @@ class Tree:
     # Inserting a node in MongoDB
     def insert_db(self, new_node, father_node, table, direction):
         try:
-            db_tree = table.find({"class": "tree"})
             if table.count_documents({"class": "tree"}) == 0:
                 table.insert_one({
                     "class": "tree",
                     "root": "",
                 })
-                db_tree = table.find({"class": "tree"})
+            db_tree = table.find({"class": "tree"})
             for tree in db_tree:
-                if tree["root"] != "":
+                if tree["root"]:
                     self.update_node_db(father_node, new_node, direction, table)
                 else:
                     self.update_root_db(new_node, table)
                 table.insert_one({
                     "class": "node",
                     "treasure": str(new_node.treasure),
-                    "left": "",
-                    "right": "",
+                    LEFT: "",
+                    RIGHT: "",
                 })
             return True
         except Exception as e:

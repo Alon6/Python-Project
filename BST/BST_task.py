@@ -19,7 +19,14 @@ logging.basicConfig(filename="log.log",
 
 # Creating an object
 logger = logging.getLogger()
-
+logger.setLevel(0)
+def is_float(string):
+    if string[0] == "-":
+        string = string[1:]
+    if string.replace(".", "").isnumeric():
+        return True
+    else:
+        return False
 
 # Function empties MongoDB and the in-program tree
 @app.route('/delete_all_treasures', methods=['DELETE'])
@@ -37,7 +44,8 @@ def delete_all_treasures():
 @app.route('/insert_treasure', methods=['POST'])
 def insert_treasure():
     val_json = request.get_json()
-    if "value" not in val_json:
+    if "value" not in val_json or not is_float(str(val_json["value"])):
+        logger.error("Error, input does not contain treasure")
         return "Error, input does not contain treasure", HTTPStatus.BAD_REQUEST
     val = val_json["value"]
     res = bst.insert(Node(val), table)
@@ -59,7 +67,8 @@ def get_treasures():
 @app.route('/delete_treasure', methods=['DELETE'])
 def delete_treasure():
     val_json = request.get_json()
-    if "value" not in val_json:
+    if "value" not in val_json or not is_float(str(val_json["value"])):
+        logger.error("Error, input does not contain treasure")
         return "Error, input does not contain treasure", HTTPStatus.BAD_REQUEST
     val = val_json["value"]
     res = bst.delete(val, table)
@@ -74,7 +83,8 @@ def delete_treasure():
 @app.route('/search_treasure', methods=['GET'])
 def search_treasure():
     val = request.args.get("value")
-    if not val:
+    if not val or not is_float(str(val)):
+        logger.error("Error, input does not contain treasure")
         return "Error, input does not contain treasure", HTTPStatus.BAD_REQUEST
     if bst.search(val):
         logger.info("treasure " + str(val) + " is in the bst")
