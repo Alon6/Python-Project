@@ -2,125 +2,203 @@ from Mongo import *
 import math
 import Node
 from math import inf
-from Node import LEFT
-from Node import RIGHT
+from Node import TreeConstants
 class Tree:
-
-    # Initializing an empty tree
+    """
+        Returns a pointer to a new empty BST
+    """
     def __init__(self):
         self.root = None
-    # Check if the tree is empty, else search the node in the tree
-    def actual_search(self, treasure):
-        if not self.root:
-            return ["", None]
-        return self.root.actual_search(treasure)
-    # Search the node, extract it from the path and print a relevant message
+
+    """
+       Returns a list with contents based on whether the node exists or not
+
+       Args: a float which describes the treasure we want to find
+
+       Return Value: if the node is in the tree then return [<'Exists'>,<the node>,<the node's parent>(if the node is not a root)]
+       if the node is not in the tree then return [<'Left/Right'>,<the node which would be the parent if the node we searched for existed>
+       ,the node which would be the grand parent if the node we searched for existed>(isn't used)]
+       if the tree is empty then return [<'FAIL'>, None]
+    """
     def search(self, treasure):
-        res = self.actual_search(treasure)
-        if res[0] or not res[1]:
+        if not self.root:
+            return [TreeConstants.FAIL, None]
+        return self.root.search(treasure)
+
+    """
+       Returns Whether the requested node is in the tree or not
+
+       Args: a float which describes the treasure we want to find
+    """
+    def search_query(self, treasure):
+        (status, node, *_) = self.search(treasure)
+        if str(status.value) or not node:
             return False
-        return (True,"")
-    # Search the place in which the node should be inserted and update the tree accordingly
+        return True
+
+    """
+        Inserting a new node to the BST and MongoDB
+        
+        Args: the node which we want to insert, the object which represents our connection with our MongoDB table
+
+        Return Value: Return whether the insert succeeded or not with a relevant error message
+    """
     def insert(self, node, table):
-        res = self.actual_search(node.treasure)
+        (dir, parent, *_) = self.search(node.treasure)
         # Check for the case in which the new node is the only node in the tree
-        if not res[1]:
+        if not parent:
             self.root = node
         # Check for normal cases
-        elif res[0] == LEFT:
-            res[1].left = node
-        elif res[0] == RIGHT:
-            res[1].right = node
+        elif dir == TreeConstants.LEFT:
+            parent.left = node
+        elif dir == TreeConstants.RIGHT:
+            parent.right = node
         else:
-            return (False, "Insertion failed, treasure " + str(node.treasure) + " already exists")
-        if insert_db(node, res[1], table, res[0]):
-            return (True,"")
-        return (False, "Insertion of treasure " + str(node.treasure) + " failed, internal error with MongoDB")
-    # Find the node in the tree and delete it
+            return False, "Insertion failed, treasure " + str(node.treasure) + " already exists"
+        if table.insert_node_db(node, parent, dir):
+            return True, ""
+        return False, "Insertion of treasure " + str(node.treasure) + " failed, internal error with MongoDB"
+
+    """
+        Deleting a node from the BST and MongoDB
+
+        Args: the node which we want to delete, the object which represents our connection with our MongoDB table
+
+        Return Value: Return whether the delete succeeded or not with a relevant error message
+    """
     def delete(self, treasure, table):
-        res = self.actual_search(treasure)
-        node = res[1]
-        flag = True
-        parent = None
-        if len(res) > 2:
-            parent = res[2]
-        if res[0] != "" or not node:
-            return (False, "Deletion failed, treasure " + str(treasure) + " does not exist")
-        # If the node has no children then simply delete it
-        if not node.left and not node.right:
-            if not parent:
-                self.root = None
-                flag = flag and update_root_db(None, table)
-            else:
-                flag = flag and swap(node, None, parent, table)
-        # If the node has one child then swap the node with its child
-        elif not node.left or not node.right:
-            child = None
-            if node.left:
-                child = node.left
-            else:
-                child = node.right
-            if not parent:
-                self.root = child
-                flag = flag and update_root_db(child, table)
-            else:
-                flag = flag and swap(node, child, parent, table)
-        # If the node has two children then swap the node with its successor (and if the successor has a child then
-        # replace the successor with its child
+        (status, deleted_node, *parent) = self.search(treasure)
+        no_error_flag = True
+        if len(parent) == 1:
+            parent = parent[0]
         else:
-            suc_res = node.right.find_successor()
-            suc = suc_res[0]
-            suc.left = node.left
-            flag = flag and update_node_db(suc, node.left, LEFT, table)
-            if not suc.right and len(suc_res) > 1:
-                suc.right = node.right
-                flag = flag and update_node_db(suc, node.right, RIGHT, table)
-            else:
-                if len(suc_res) > 1:
-                    suc_parent = suc_res[1]
-                    flag = flag and swap(suc, suc.right, suc_parent, table)
-                    suc.right = node.right
-                    flag = flag and update_node_db(suc, node.right, RIGHT, table)
-            if not parent:
-                self.root = suc
-                flag = flag and update_root_db(suc, table)
-            else:
-                flag = flag and swap(node, suc, parent, table)
-        flag = flag and delete_db(node, table)
-        if flag:
-            return (True,"")
-        return (False, "Deletion of treasure " + str(node.treasure) + " failed, internal error with MongoDB")
-    # Initiate the pass
+            parent = None
+        if str(status.value) or not deleted_node:
+            return False, "Deletion failed, treasure " + str(treasure) + " does not exist"
+        if not deleted_node.left and not deleted_node.right:
+            no_error_flag = self.delete_without_children(table, deleted_node, parent, no_error_flag)
+
+        elif not deleted_node.left or not deleted_node.right:
+            no_error_flag = self.delete_with_one_child(table, deleted_node, parent, no_error_flag)
+        else:
+            no_error_flag = self.delete_with_two_children(table, deleted_node, parent, no_error_flag)
+        if no_error_flag:
+            return True, ""
+        return False, "Deletion of treasure " + str(deleted_node.treasure) + " failed, internal error with MongoDB"
+
+    """
+        Deleting a new node from the BST and MongoDB in the case it has no children
+
+        Args: the object which represents our connection with our MongoDB table, the node which we want to delete,
+        the parent of the node which we want to delete (None if the node is the root),
+        the flag which save if all of the MongoDB operations have succeeded
+
+        Return Value: Return whether the delete succeeded or not
+    """
+    def delete_without_children(self, table, deleted_node, parent, no_error_flag):
+        if not parent:
+            self.root = None
+            return no_error_flag and table.update_root_db(None)
+        else:
+            return no_error_flag and table.update_node(deleted_node, None, parent)
+
+    """
+        Deleting a new node from the BST and MongoDB in the case it has one child
+
+        Args: the object which represents our connection with our MongoDB table, the node which we want to delete,
+        the parent of the node which we want to delete (None if the node is the root),
+        the flag which save if all of the MongoDB operations have succeeded
+
+        Return Value: Return whether the delete succeeded or not
+    """
+    def delete_with_one_child(self, table, deleted_node, parent, no_error_flag):
+        if deleted_node.left:
+            child = deleted_node.left
+        else:
+            child = deleted_node.right
+        if not parent:
+            self.root = child
+            return no_error_flag and table.update_root_db(child)
+        else:
+            return no_error_flag and table.update_node(deleted_node, child, parent)
+
+    """
+        Deleting a new node from the BST and MongoDB in the case it has two children
+
+        Args: the object which represents our connection with our MongoDB table, the node which we want to delete,
+        the parent of the node which we want to delete (None if the node is the root),
+        the flag which save if all of the MongoDB operations have succeeded
+
+        Return Value: Return whether the delete succeeded or not
+    """
+    def delete_with_two_children(self, table, deleted_node, parent, no_error_flag):
+        (suc, *suc_parent) = deleted_node.right.find_successor()
+        if (len(suc_parent) > 0):
+            suc_parent = suc_parent[0]
+        else:
+            suc_parent = None
+        no_error_flag = no_error_flag and table.update_node(suc.left, deleted_node.left, suc, TreeConstants.LEFT)
+        if not suc.right and suc_parent:
+            no_error_flag = no_error_flag and table.update_node(suc.right, deleted_node.right, suc, TreeConstants.RIGHT)
+        elif suc_parent:
+                no_error_flag = no_error_flag and table.update_node(suc, suc.right, suc_parent)
+                no_error_flag = no_error_flag and table.update_node(suc.right, deleted_node.right, suc)
+        if not parent:
+            self.root = suc
+            no_error_flag = no_error_flag and table.update_root_db(suc)
+        else:
+            no_error_flag = no_error_flag and table.update_node(deleted_node, suc, parent)
+        return no_error_flag and table.delete_node_db(deleted_node)
+
+    """
+        Returns a list which contains all of the tree's nodes which are ordered based on the input
+
+        Args: the order which the pass is based on
+    """
     def bst_pass(self, order):
         if not self.root:
             return []
-        if order == "pre-order" or order == "in-order" or order == "post-order":
+        if order == TreeConstants.PRE_ORDER or order == TreeConstants.IN_ORDER or order == TreeConstants.POST_ORDER:
             return self.root.bst_pass(order, [])
         else:
             return None
-    # Check if the tree is a valid BST and if it is then generate its visualization
+
+    """
+        Returns whether the BST is valid or not, and if it is then create, print and save the BST's visualization to MongoDB
+
+        Args: the object which represents our connection with our MongoDB table
+    """
     def validate_and_visualize(self, table):
-        if not self.root:
-            return True
         # Check validation
-        depth = self.root.validate(1)
+        depth = self.validate()
         if depth == inf:
             return False
-        # Create empty string list based on tree's depth
-        vis = []
-        for i in range(0, depth):
-            str = ""
-            for j in range(0, int(math.pow(2,depth))):
-                str += "  "
-            vis.append(str)
-        # Generate visualization
-        res = self.root.visualize(vis, 0, 0)
-        vis = res[0]
-        print("BST visualization: ")
-        for row in vis:
-            print(row)
-        insert_vis(vis, table)
+        self.visualize(table, depth)
         return True
+
+    """
+        Returns whether the BST is valid or not
+    """
+    def validate(self):
+        if not self.root:
+            return True
+        return self.root.validate(1)
+
+    """
+        Creates, prints and saves the BST's visualization to MongoDB
+
+        Args: the object which represents our connection with our MongoDB table, and the tree's depth
+    """
+    def visualize(self, table, depth):
+        # Create empty string list based on tree's depth
+        vis_matrix = [''.join("   " for _ in range(0, int(math.pow(2, depth)))) for _ in range(0, depth)]
+        # Generate visualization
+        res = self.root.visualize_pass(vis_matrix, 0, 0)
+        vis_matrix = res[0]
+        print("BST visualization: ")
+        for row in vis_matrix:
+            print(row)
+        table.insert_vis(vis_matrix)
 
     # Functions for testing
     """
